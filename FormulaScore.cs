@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using Ciloci.Flee;
@@ -10,11 +11,20 @@ namespace FormulaScore
 {
     public class FormulaScore
     {
+        private const string valueIDRegexPattern = @"\[(.+?)\]";
         private Dictionary<string, long> formulaIDToIntegerValue = new Dictionary<string, long>();
         private Dictionary<string, double> formulaIDToFloatingPointValue = new Dictionary<string, double>();
-        IGenericExpression<double> compiledExpression;
+        private IGenericExpression<double> compiledExpression;
 
-        public string ScoringFormula { get; private set; }
+        public string ScoringFormula { get; set; }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public FormulaScore()
+        {
+            ScoringFormula = "";
+        }
 
         /// <summary>
         /// 
@@ -22,20 +32,28 @@ namespace FormulaScore
         /// <param name="scoringFormula"></param>
         public FormulaScore(string scoringFormula)
         {
-            ScoringFormula = scoringFormula;
+            if (!string.IsNullOrWhiteSpace(scoringFormula))
+            {
+                ScoringFormula = scoringFormula;
+            }
+            else
+            {
+                ScoringFormula = "";
+            }
         }
 
         /// <summary>
         /// 
         /// </summary>
         /// <returns></returns>
-        public bool CheckScoringFormula()
+        public bool CheckFormula()
         {
+            // TODO: refactor this. 
             try
             {
                 compileExpression();
             }
-            catch (ExpressionCompileException ex)
+            catch (ExpressionCompileException)
             {
                 // Expression would not compile, so scoring formula is not valid.
 
@@ -45,6 +63,15 @@ namespace FormulaScore
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Checks if the formula is a vaild arithmetic formula without checking 
+        /// </summary>
+        /// <returns></returns>
+        public bool CheckFormulaSyntax()
+        {
+            return false;
         }
 
         /// <summary>
@@ -70,10 +97,9 @@ namespace FormulaScore
         /// <param name="valueName"></param>
         /// <param name="valueID"></param>
         /// <param name="valueValue"></param>
-        public void AddScoringValue(string valueName, string valueID, long valueValue)
+        public void AddScoringValue(string scoringID, long scoringValue)
         {
-            //formulaIDToValueName.Add(valueID, valueName);
-            formulaIDToIntegerValue.Add(valueID, valueValue);
+            formulaIDToIntegerValue.Add(scoringID, scoringValue);
         }
 
         /// <summary>
@@ -82,11 +108,21 @@ namespace FormulaScore
         /// <param name="valueName"></param>
         /// <param name="valueID"></param>
         /// <param name="valueValue"></param>
-        public void AddScoringValue(string valueName, string valueID, double valueValue)
+        public void AddScoringValue(string scoringID, double scoringValue)
         {
-            //formulaIDToValueName.Add(valueID, valueName);
-            formulaIDToFloatingPointValue.Add(valueID, valueValue);
+            formulaIDToFloatingPointValue.Add(scoringID, scoringValue);
         }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <returns></returns>
+        public static List<string> FetchScoringIDs(string formula)
+        {
+            return parseScoringIds(formula);
+        }
+
+        #region private helper functions
 
         private void compileExpression()
         {
@@ -94,7 +130,7 @@ namespace FormulaScore
             
             // Allows use of all public static Math functions:
             //context.Imports.AddType(typeof(Math));
-
+            
             // Load values into Flee context.
             foreach (KeyValuePair<string, long> pair in formulaIDToIntegerValue)
             {
@@ -105,7 +141,30 @@ namespace FormulaScore
                 context.Variables[pair.Key] = pair.Value;
             }
             
-            compiledExpression = context.CompileGeneric<double>(ScoringFormula);
+            compiledExpression = context.CompileGeneric<double>(cleanFormula(ScoringFormula));
+        }
+
+        // Need to remove "[]" scoringId demarkation marks before formula can be used.
+        private string cleanFormula(string formula)
+        {
+            // TODO: This all seems sort of hackey. Refactor.
+            return formula.Replace("[", "").Replace("]", "");
+        }
+
+        // Get the list of scoring values that exist in the text string.
+        private static List<string> parseScoringIds(string formula)
+        {
+            MatchCollection matches = Regex.Matches(formula, valueIDRegexPattern, RegexOptions.IgnoreCase);
+            
+            List<string> valueIDs = new List<string>();
+            for (int i = 0; i < matches.Count; i++)
+            {
+                // Extract values from the first grouping.
+                valueIDs.Add(matches[i].Groups[1].Value);
+            }
+
+            return valueIDs;
         }
     }
+        #endregion
 }
